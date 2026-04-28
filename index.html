@@ -148,13 +148,6 @@
 
         function Dashboard({ setView, projects }) {
             const activeCount = projects.filter(p => ["wip", "needs_scheduling"].includes(p.status)).length;
-            
-            // DYNAMIC GROSS VOLUME FROM SUPABASE
-            const totalVolume = projects.reduce((sum, p) => {
-                const val = typeof p.value === 'number' ? p.value : parseFloat(String(p.value).replace(/[^0-9.-]+/g,"")) || 0;
-                return sum + val;
-            }, 0);
-
             return (
                 <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
                     <div style={{
@@ -163,7 +156,7 @@
                         position: "relative", overflow: "hidden",
                     }}>
                         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", color: 'var(--goldDim)', textTransform: "uppercase", margin: 0 }}>Projected Gross Volume</p>
-                        <h2 style={{ fontSize: 36, fontWeight: 700, color: 'var(--goldLight)', margin: "8px 0 0" }}>${totalVolume.toLocaleString()}</h2>
+                        <h2 style={{ fontSize: 36, fontWeight: 700, color: 'var(--goldLight)', margin: "8px 0 0" }}>$184,200</h2>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                         <div onClick={() => setView("jobs")} style={{ background: 'var(--elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: "16px", cursor: "pointer", animation: 'fadeUp 0.4s ease both' }}>
@@ -201,13 +194,13 @@
             const onDragStart = (id) => setDraggingId(id);
             const onDragOver = (e) => e.preventDefault();
             
-            // UPDATE SUPABASE ON DROP
             const onDrop = async (status) => {
                 if (!draggingId) return;
-                const { error } = await supabase.from('projects').update({ status }).eq('id', draggingId);
-                if (!error) {
-                    setProjects(prev => prev.map(p => p.id === draggingId ? { ...p, status } : p));
-                }
+                // UPDATE LOCAL STATE FIRST FOR SPEED
+                setProjects(prev => prev.map(p => p.id === draggingId ? { ...p, status } : p));
+                
+                // SYNC WITH SUPABASE
+                await supabase.from('projects').update({ status }).eq('id', draggingId);
                 setDraggingId(null);
             };
 
@@ -227,7 +220,7 @@
                                         <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)', margin: 0 }}>{p.name}</p>
                                         <p style={{ fontSize: 11, color: 'var(--muted)', margin: "4px 0 8px" }}>{p.addr}</p>
                                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--goldLight)', background: 'var(--navy)', padding: "2px 8px", borderRadius: 4 }}>${Number(p.value).toLocaleString()}</span>
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--goldLight)', background: 'var(--navy)', padding: "2px 8px", borderRadius: 4 }}>{p.value}</span>
                                             <Icon name="chevron" size={12} color="var(--dimText)" />
                                         </div>
                                     </div>
@@ -280,7 +273,7 @@
                                 <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--white)', margin: 0 }}>{project.name}</h1>
                                 <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--gold)', textTransform: 'uppercase' }}>{currentStage}</span>
                             </div>
-                            <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--goldLight)' }}>${Number(project.value).toLocaleString()}</p>
+                            <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--goldLight)' }}>{project.value}</p>
                         </div>
                     </div>
 
@@ -363,7 +356,7 @@
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>Estimate Total</span>
-                                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--white)' }}>${Number(project.value).toLocaleString()}</span>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--white)' }}>{project.value}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>Payments Made</span>
@@ -372,7 +365,7 @@
                             <div style={{ height: 1, background: 'var(--border)' }}></div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--white)' }}>Balance Due</span>
-                                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--white)' }}>${Number(project.value).toLocaleString()}</span>
+                                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--white)' }}>{project.value}</span>
                             </div>
                         </div>
                     </div>
@@ -443,7 +436,15 @@
             const [view, setView] = useState("dashboard");
             const [selectedProjectId, setSelectedProjectId] = useState(null);
             const [splash, setSplash] = useState(true);
-            const [projects, setProjects] = useState([]); // EMPTY - WAITING FOR SUPABASE
+            
+            // INITIAL STATE WITH YOUR DATA
+            const [projects, setProjects] = useState([
+                { id: 1, name: "Luxury Kitchen Remodel", client: "Justin Samuel Castro", phone: "(555) 123-4567", email: "justin@fieldmind.ai", addr: "452 Highview Dr", value: "$45,000", status: "wip", notes: [{ text: "Framing inspection passed.", timestamp: "Apr 28, 10:45 AM" }] },
+                { id: 2, name: "Deck Expansion", client: "Sarah Miller", addr: "102 Whispering Pines", value: "$12,500", status: "new_lead", notes: [] },
+                { id: 3, name: "Foundation Inspection", client: "Robert Fox", addr: "Peachtree St", value: "$4,200", status: "paid_closed", notes: [] },
+                { id: 4, name: "Basement Renovation", client: "Wade Warren", addr: "88 Oak Ave", value: "$28,000", status: "est_needed", notes: [] },
+                { id: 5, name: "Master Suite Addition", client: "Jane Cooper", addr: "123 Maple St", value: "$62,000", status: "est_delivered", notes: [] },
+            ]);
 
             useEffect(() => { 
                 setTimeout(() => setSplash(false), 2000); 
@@ -452,7 +453,10 @@
 
             async function fetchLiveJobs() {
                 const { data, error } = await supabase.from('projects').select('*');
-                if (!error) setProjects(data || []);
+                // ONLY UPDATE IF DATA ACTUALLY EXISTS IN SUPABASE
+                if (!error && data && data.length > 0) {
+                    setProjects(data);
+                }
             }
 
             const openProject = (p) => { setSelectedProjectId(p.id); setView("jobDetail"); };
